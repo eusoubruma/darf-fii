@@ -1,0 +1,25 @@
+# Segredos — NUNCA comitar
+auth_config.yaml
+.streamlit/secrets.toml
+estado.json
+*.json
+!data/*.json
+
+# Backups de usuário
+dados/
+*.bak
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

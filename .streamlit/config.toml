@@ -1,0 +1,13 @@
+# Tema inspirado na identidade visual da B3:
+# azul-marinho institucional, acentos em ciano, fundo claro.
+
+[theme]
+base = "light"
+primaryColor = "#0086C9"            # ciano B3 (links, foco, sliders)
+backgroundColor = "#F5F6F8"         # fundo levemente cinza (área de conteúdo)
+secondaryBackgroundColor = "#FFFFFF"  # cards, inputs
+textColor = "#0B1F3A"               # azul-marinho escuro p/ texto
+font = "sans serif"
+
+[server]
+headless = true

@@ -1,0 +1,25 @@
+# Template de configuração de autenticação.
+# Copie para `auth_config.yaml` e preencha. NUNCA comite o arquivo real.
+#
+# Gere o hash da senha com:  python gerar_hash.py minha_senha
+# Gere a chave do cookie com: python -c "import secrets; print(secrets.token_hex(32))"
+
+credentials:
+  usernames:
+    bruno:
+      name: "Bruno"
+      email: "bruno@example.com"
+      password: "$2b$12$COLE_AQUI_O_HASH_GERADO"
+    conjuge:
+      name: "Nome do Cônjuge"
+      email: "conjuge@example.com"
+      password: "$2b$12$COLE_AQUI_O_HASH_GERADO"
+
+cookie:
+  name: "darf_fii_auth"
+  key: "COLE_AQUI_64_HEX_GERADOS_PELO_SECRETS"
+  expiry_days: 7
+
+# Opcional — usuários pré-autorizados que podem se autocadastrar
+preauthorized:
+  emails: []
