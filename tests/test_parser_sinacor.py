@@ -128,6 +128,44 @@ def test_cnpj_resolvido_de_tabela_quando_fornecida():
     assert ops[1].cnpj == "26.502.794/0001-85"
 
 
+def test_nota_nubank_b3_rv_listado_resolve_ticker_por_nome():
+    """Nota Nubank usa 'B3 RV LISTADO' e não traz ticker no spec — só nome do fundo."""
+    nota = """
+Nr. Nota Folha Data pregão
+   726382 1 17/01/2023
+Negocios realizados
+Q Negociação C/V Tipo mercado Prazo Especificação do título Obs. Quantidade Preço/Ajuste Valor/Ajuste D/C
+B3 RV LISTADO C VISTA FII IRIDIUM CI ER 1 91,22 91,22 D
+B3 RV LISTADO C VISTA FII MAXI REN CI 5 10,16 50,80 D
+B3 RV LISTADO C VISTA FII MALLS BP CI 1 103,38 103,38 D
+Resumo Financeiro
+ Taxa de liquidação 0,07 D
+ Emolumentos 0,01 D
+"""
+    parsed = parse_texto(nota)
+    assert parsed.data_pregao == date(2023, 1, 17)
+    assert len(parsed.operacoes) == 3
+    tickers = [o.ticker for o in parsed.operacoes]
+    assert "IRIM11" in tickers   # resolvido por token match (IRIDIUM → IRIM)
+    assert "MXRF11" in tickers   # resolvido por token match (MAXI REN → MXRF)
+    assert "BPML11" in tickers   # resolvido por alias (MALLS BP → BPML)
+
+
+def test_spec_nao_resolvido_preserva_para_correcao_manual():
+    """Quando não conseguimos resolver, o ticker vira '?...' (visível ao usuário)."""
+    nota = """
+Nr. Nota 1 Folha Data pregão
+                    01/01/2025
+Negocios realizados
+B3 RV LISTADO C VISTA FII NOMECRIADONAOEXISTE CI 1 100,00 100,00 D
+Resumo Financeiro
+ Taxa de liquidação 0,01 D
+"""
+    parsed = parse_texto(nota)
+    assert len(parsed.operacoes) == 1
+    assert parsed.operacoes[0].ticker.startswith("?")  # marcado p/ correção manual
+
+
 def test_nota_sem_fii_retorna_lista_vazia():
     nota = """
 Nr. nota 1 Folha Data pregão
