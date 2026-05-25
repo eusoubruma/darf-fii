@@ -151,10 +151,22 @@ def pagina_apuracao() -> None:
         st.info("Sem operações para apurar.")
         return
 
-    apuracoes, estado_final = apurar(
-        st.session_state.operacoes,
-        estado_inicial=_copiar_estado(st.session_state.estado_inicial),
-    )
+    try:
+        apuracoes, estado_final = apurar(
+            st.session_state.operacoes,
+            estado_inicial=_copiar_estado(st.session_state.estado_inicial),
+        )
+    except ValueError as exc:
+        st.error(
+            f"**Não foi possível apurar:** {exc}\n\n"
+            "Isso acontece quando o motor encontra uma **venda sem posição correspondente** — "
+            "geralmente porque as compras originais são anteriores ao período importado.\n\n"
+            "**Como resolver:**\n"
+            "1. Vá na aba **Estado inicial** e cadastre a posição que você tinha antes "
+            "(quantidade + custo médio na época da compra original); ou\n"
+            "2. Importe um extrato XLSX de um período maior, que inclua as compras originais."
+        )
+        return
 
     linhas = []
     for a in apuracoes:
