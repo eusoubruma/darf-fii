@@ -27,10 +27,9 @@ def _df_b3(linhas):
 
 
 def test_parse_b3_compra_e_venda():
-    # Movimentação coluna tem "Compra"/"Venda" diretos — interpretação literal
     df = _df_b3([
-        ["Debito",  "10/01/2025", "Compra", "Mercado à Vista", "-", "XP", "HGLG11", 100, 100.00, 10000.00],
-        ["Credito", "15/02/2025", "Venda",  "Mercado à Vista", "-", "XP", "HGLG11",  50, 120.00,  6000.00],
+        ["Credito", "10/01/2025", "Compra", "Mercado à Vista", "-", "XP", "HGLG11", 100, 100.00, 10000.00],
+        ["Debito",  "15/02/2025", "Venda",  "Mercado à Vista", "-", "XP", "HGLG11",  50, 120.00,  6000.00],
     ])
     ops = parse_dataframe(df)
     assert len(ops) == 2
@@ -76,16 +75,16 @@ def test_tolera_data_como_datetime():
 
 
 def test_tolera_credito_debito_em_vez_de_compra_venda():
-    """Quando só há Credito/Debito: perspectiva financeira — Debito=compra, Credito=venda."""
+    """Perspectiva de custódia: Credito=ativos entraram=compra, Debito=ativos saíram=venda."""
     df = pd.DataFrame([
-        {"Entrada/Saída": "Debito", "Data do Negócio": "10/01/2025",
+        {"Entrada/Saída": "Credito", "Data do Negócio": "10/01/2025",
          "Código de Negociação": "HGLG11", "Quantidade": 100, "Preço": 100.00},
-        {"Entrada/Saída": "Credito", "Data do Negócio": "15/02/2025",
+        {"Entrada/Saída": "Debito", "Data do Negócio": "15/02/2025",
          "Código de Negociação": "HGLG11", "Quantidade": 50, "Preço": 110.00},
     ])
     ops = parse_dataframe(df)
-    assert ops[0].tipo == TipoOperacao.COMPRA   # Debito = saída de dinheiro = compra
-    assert ops[1].tipo == TipoOperacao.VENDA    # Credito = entrada de dinheiro = venda
+    assert ops[0].tipo == TipoOperacao.COMPRA   # Credito = ativos creditados = compra
+    assert ops[1].tipo == TipoOperacao.VENDA    # Debito = ativos debitados = venda
 
 
 def test_falha_se_colunas_obrigatorias_ausentes():
@@ -129,11 +128,11 @@ def test_movimentacao_b3_atual_extrai_ticker_de_produto():
     ops = parse_dataframe(df)
     assert len(ops) == 2
     assert ops[0].ticker == "IRIM11"
-    assert ops[0].tipo == TipoOperacao.VENDA    # Credito = entrou dinheiro = venda
+    assert ops[0].tipo == TipoOperacao.COMPRA   # Credito = ativos creditados = compra
     assert ops[0].data == date(2025, 12, 23)
     assert ops[0].preco_unitario == D("65.00")
     assert ops[1].ticker == "HGLG11"
-    assert ops[1].tipo == TipoOperacao.COMPRA   # Debito = saiu dinheiro = compra
+    assert ops[1].tipo == TipoOperacao.VENDA    # Debito = ativos debitados = venda
 
 
 def test_movimentacao_b3_filtra_rendimentos_e_jcp():

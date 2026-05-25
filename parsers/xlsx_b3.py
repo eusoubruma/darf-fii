@@ -77,19 +77,20 @@ def _mapear_colunas(df: pd.DataFrame) -> dict[str, str]:
 def _interpretar_tipo(valor: str) -> TipoOperacao | None:
     """
     A B3 usa diferentes convenções no extrato de Movimentação:
-    - 'Compra'/'Venda'  → direto.
-    - 'Debito'/'Credito' → perspectiva FINANCEIRA (não de custódia):
-        Debito  = saiu dinheiro da conta = COMPRA
-        Credito = entrou dinheiro       = VENDA (ou provento — filtrar por evento antes)
+    - 'Compra'/'Venda' → direto.
+    - 'Debito'/'Credito' → perspectiva da CUSTÓDIA (não financeira):
+        Credito = ativos entraram na carteira = COMPRA
+        Debito  = ativos saíram                = VENDA
+      (Para eventos como "Rendimento"/JCP, o filtro de evento já descarta antes.)
     """
     v = _normalizar(valor)
     if v in ("compra", "c"):
         return TipoOperacao.COMPRA
     if v in ("venda", "v"):
         return TipoOperacao.VENDA
-    if v == "debito":
-        return TipoOperacao.COMPRA
     if v == "credito":
+        return TipoOperacao.COMPRA
+    if v == "debito":
         return TipoOperacao.VENDA
     return None
 
