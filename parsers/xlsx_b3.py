@@ -43,11 +43,21 @@ def _normalizar(s: str) -> str:
 _COLUNAS = {
     "tipo": ["entrada/saida", "entrada saida", "movimentacao", "tipo de movimentacao", "tipo"],
     "data": ["data do negocio", "data negocio", "data"],
-    "ticker": ["codigo de negociacao", "ticker", "papel", "ativo", "codigo"],
+    "ticker": ["codigo de negociacao", "ticker", "papel", "ativo", "codigo", "produto"],
     "quantidade": ["quantidade", "qtd", "qtde"],
-    "preco": ["preco", "preco unitario", "preco/ajuste"],
+    "preco": ["preco", "preco unitario", "preco unit", "preco/ajuste"],
     "valor": ["valor", "valor operacao", "valor da operacao"],
     "instituicao": ["instituicao", "corretora"],
+    # Coluna usada para filtrar SÓ os trades (excluir rendimentos, JCP, bonificações etc.)
+    "evento": ["movimentacao", "tipo de movimentacao", "evento"],
+}
+
+# Eventos do extrato B3 que correspondem a operações de compra/venda.
+# Tudo que não estiver aqui (rendimento, JCP, atualização, bonificação...) é ignorado.
+_EVENTOS_TRADE = {
+    "transferencia - liquidacao",  # liquidação de negociação na bolsa
+    "compra",
+    "venda",
 }
 
 
@@ -66,14 +76,20 @@ def _mapear_colunas(df: pd.DataFrame) -> dict[str, str]:
 
 def _interpretar_tipo(valor: str) -> TipoOperacao | None:
     """
-    A B3 usa diferentes convenções:
-    - 'Credito'/'Debito' (do ponto de vista da custódia: crédito = recebeu = compra)
-    - 'Compra'/'Venda'
+    A B3 usa diferentes convenções no extrato de Movimentação:
+    - 'Compra'/'Venda'  → direto.
+    - 'Debito'/'Credito' → perspectiva FINANCEIRA (não de custódia):
+        Debito  = saiu dinheiro da conta = COMPRA
+        Credito = entrou dinheiro       = VENDA (ou provento — filtrar por evento antes)
     """
     v = _normalizar(valor)
-    if v in ("compra", "credito", "c"):
+    if v in ("compra", "c"):
         return TipoOperacao.COMPRA
-    if v in ("venda", "debito", "v"):
+    if v in ("venda", "v"):
+        return TipoOperacao.VENDA
+    if v == "debito":
+        return TipoOperacao.COMPRA
+    if v == "credito":
         return TipoOperacao.VENDA
     return None
 
@@ -106,6 +122,22 @@ def _para_data(v) -> date | None:
 def _eh_ticker_fii(ticker: str) -> bool:
     """Usa o cadastro oficial da B3 — descarta ETFs como BOVA11."""
     return eh_fii_listado(ticker)
+
+
+_RE_TICKER_NO_PRODUTO = re.compile(r"^\s*([A-Z]{4}\d{1,2})\b")
+
+
+def _extrair_ticker(valor: str) -> str:
+    """
+    Extrai o ticker do campo da B3.
+
+    Aceita ambos os formatos:
+      - "HGLG11"                      (extrato Negociação antigo)
+      - "HGLG11 - CSHG LOGÍSTICA FII" (extrato Movimentação atual)
+    """
+    s = str(valor).strip().upper()
+    m = _RE_TICKER_NO_PRODUTO.match(s)
+    return m.group(1) if m else s
 
 
 def parse_xlsx(
@@ -148,13 +180,19 @@ def parse_dataframe(
     cnpj_por_ticker = cnpj_por_ticker or {}
     operacoes: list[Operacao] = []
     for _, row in df.iterrows():
+        # Filtra eventos que não são trade (rendimento, JCP, bonificação etc.)
+        if "evento" in mapa:
+            evento = _normalizar(row[mapa["evento"]])
+            if evento not in _EVENTOS_TRADE:
+                continue
+
         tipo = _interpretar_tipo(row[mapa["tipo"]])
         if tipo is None:
             continue
         data_op = _para_data(row[mapa["data"]])
         if data_op is None:
             continue
-        ticker = str(row[mapa["ticker"]]).strip().upper()
+        ticker = _extrair_ticker(row[mapa["ticker"]])
         if not ticker or ticker == "NAN":
             continue
         if apenas_fii and not _eh_ticker_fii(ticker):

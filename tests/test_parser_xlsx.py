@@ -27,9 +27,10 @@ def _df_b3(linhas):
 
 
 def test_parse_b3_compra_e_venda():
+    # Movimentação coluna tem "Compra"/"Venda" diretos — interpretação literal
     df = _df_b3([
-        ["Credito", "10/01/2025", "Compra", "Mercado à Vista", "-", "XP", "HGLG11", 100, 100.00, 10000.00],
-        ["Debito",  "15/02/2025", "Venda",  "Mercado à Vista", "-", "XP", "HGLG11",  50, 120.00,  6000.00],
+        ["Debito",  "10/01/2025", "Compra", "Mercado à Vista", "-", "XP", "HGLG11", 100, 100.00, 10000.00],
+        ["Credito", "15/02/2025", "Venda",  "Mercado à Vista", "-", "XP", "HGLG11",  50, 120.00,  6000.00],
     ])
     ops = parse_dataframe(df)
     assert len(ops) == 2
@@ -75,16 +76,16 @@ def test_tolera_data_como_datetime():
 
 
 def test_tolera_credito_debito_em_vez_de_compra_venda():
-    """Algumas exportações da B3 usam só 'Credito/Debito' (sem coluna 'Movimentação')."""
+    """Quando só há Credito/Debito: perspectiva financeira — Debito=compra, Credito=venda."""
     df = pd.DataFrame([
-        {"Entrada/Saída": "Credito", "Data do Negócio": "10/01/2025",
+        {"Entrada/Saída": "Debito", "Data do Negócio": "10/01/2025",
          "Código de Negociação": "HGLG11", "Quantidade": 100, "Preço": 100.00},
-        {"Entrada/Saída": "Debito", "Data do Negócio": "15/02/2025",
+        {"Entrada/Saída": "Credito", "Data do Negócio": "15/02/2025",
          "Código de Negociação": "HGLG11", "Quantidade": 50, "Preço": 110.00},
     ])
     ops = parse_dataframe(df)
-    assert ops[0].tipo == TipoOperacao.COMPRA
-    assert ops[1].tipo == TipoOperacao.VENDA
+    assert ops[0].tipo == TipoOperacao.COMPRA   # Debito = saída de dinheiro = compra
+    assert ops[1].tipo == TipoOperacao.VENDA    # Credito = entrada de dinheiro = venda
 
 
 def test_falha_se_colunas_obrigatorias_ausentes():
@@ -109,6 +110,51 @@ def test_ignora_linhas_sem_tipo_valido():
     ])
     ops = parse_dataframe(df)
     assert len(ops) == 1
+
+
+def test_movimentacao_b3_atual_extrai_ticker_de_produto():
+    """Formato real do extrato Movimentação (2025+): coluna 'Produto' tem 'TICKER - NOME'."""
+    df = pd.DataFrame([
+        {"Entrada/Saída": "Credito", "Data": "23/12/2025",
+         "Movimentação": "Transferência - Liquidação",
+         "Produto": "IRIM11 - IRIDIUM FUNDO DE INVESTIMENTO IMOBILIÁRIO",
+         "Instituição": "NU INVEST", "Quantidade": 1,
+         "Preço unitário": 65.00, "Valor da Operação": 65.00},
+        {"Entrada/Saída": "Debito", "Data": "08/04/2026",
+         "Movimentação": "Transferência - Liquidação",
+         "Produto": "HGLG11 - CSHG LOGÍSTICA",
+         "Instituição": "NU INVEST", "Quantidade": 10,
+         "Preço unitário": 150.00, "Valor da Operação": 1500.00},
+    ])
+    ops = parse_dataframe(df)
+    assert len(ops) == 2
+    assert ops[0].ticker == "IRIM11"
+    assert ops[0].tipo == TipoOperacao.VENDA    # Credito = entrou dinheiro = venda
+    assert ops[0].data == date(2025, 12, 23)
+    assert ops[0].preco_unitario == D("65.00")
+    assert ops[1].ticker == "HGLG11"
+    assert ops[1].tipo == TipoOperacao.COMPRA   # Debito = saiu dinheiro = compra
+
+
+def test_movimentacao_b3_filtra_rendimentos_e_jcp():
+    """Eventos como Rendimento, JCP, Bonificação não são trades — devem ser ignorados."""
+    df = pd.DataFrame([
+        # Trade real
+        {"Entrada/Saída": "Credito", "Data": "10/01/2025",
+         "Movimentação": "Transferência - Liquidação",
+         "Produto": "HGLG11 - CSHG", "Quantidade": 10, "Preço unitário": 100.00},
+        # Rendimento de FII (dividendo) — não é operação tributável
+        {"Entrada/Saída": "Credito", "Data": "15/01/2025",
+         "Movimentação": "Rendimento",
+         "Produto": "HGLG11 - CSHG", "Quantidade": 10, "Preço unitário": 0.85},
+        # JCP de ação
+        {"Entrada/Saída": "Credito", "Data": "20/01/2025",
+         "Movimentação": "Juros sobre Capital Próprio",
+         "Produto": "ITSA4 - ITAUSA", "Quantidade": 100, "Preço unitário": 0.20},
+    ])
+    ops = parse_dataframe(df, apenas_fii=False)
+    assert len(ops) == 1
+    assert ops[0].ticker == "HGLG11"
 
 
 def test_extrato_b3_nao_traz_custos_nem_irrf():
