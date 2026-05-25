@@ -41,7 +41,7 @@ def test_custo_medio_ponderado_em_duas_compras():
         op(date(2025, 2, 10), "HGLG11", "C", 100, "120.00"),
         op(date(2025, 3, 10), "HGLG11", "V", 100, "130.00"),
     ]
-    apuracoes, estado = apurar(ops)
+    apuracoes, estado, _ = apurar(ops)
     mar = apuracoes[-1]
     assert mar.resultado_swing == D("2000.00")
     assert mar.ir_swing == D("400.00")  # 20% de 2000
@@ -55,7 +55,7 @@ def test_custos_de_corretagem_entram_no_custo_medio():
         op(date(2025, 1, 10), "HGLG11", "C", 100, "100.00", custos="50.00"),  # custo total 10050
         op(date(2025, 2, 10), "HGLG11", "V", 100, "110.00", custos="30.00"),  # receita líquida 10970
     ]
-    apuracoes, _ = apurar(ops)
+    apuracoes, _, _ = apurar(ops)
     # resultado = 10970 - 10050 = 920
     assert apuracoes[-1].resultado_swing == D("920.00")
 
@@ -70,7 +70,7 @@ def test_venda_pequena_ainda_tributa():
         op(date(2025, 1, 10), "XPLG11", "C", 10, "100.00"),
         op(date(2025, 2, 10), "XPLG11", "V", 10, "150.00"),  # lucro R$500, valor R$1500
     ]
-    apuracoes, _ = apurar(ops)
+    apuracoes, _, _ = apurar(ops)
     assert apuracoes[-1].resultado_swing == D("500.00")
     assert apuracoes[-1].ir_swing == D("100.00")  # 20% de 500 — tributado mesmo abaixo de R$20k
 
@@ -86,7 +86,7 @@ def test_prejuizo_de_um_mes_compensa_lucro_do_seguinte():
         op(date(2025, 2, 5), "XPLG11", "C", 100, "100.00"),
         op(date(2025, 2, 20), "XPLG11", "V", 100, "150.00"),  # lucro 5000
     ]
-    apuracoes, estado = apurar(ops)
+    apuracoes, estado, _ = apurar(ops)
     fev = apuracoes[1]
     assert fev.resultado_swing == D("5000.00")
     assert fev.prejuizo_swing_compensado == D("2000.00")
@@ -105,7 +105,7 @@ def test_prejuizo_swing_nao_compensa_lucro_day_trade():
         op(date(2025, 2, 10), "XPLG11", "C", 100, "100.00"),
         op(date(2025, 2, 10), "XPLG11", "V", 100, "110.00"),  # lucro day trade 1000
     ]
-    apuracoes, estado = apurar(ops)
+    apuracoes, estado, _ = apurar(ops)
     fev = apuracoes[1]
     assert fev.resultado_day == D("1000.00")
     assert fev.prejuizo_day_compensado == D("0.00")  # não usa prejuízo de swing
@@ -127,7 +127,7 @@ def test_day_trade_nao_altera_custo_medio_da_posicao():
         op(date(2025, 1, 10), "HGLG11", "C", 50, "105.00"),  # vira day trade
         op(date(2025, 1, 10), "HGLG11", "V", 50, "108.00"),  # vira day trade
     ]
-    apuracoes, estado = apurar(ops)
+    apuracoes, estado, _ = apurar(ops)
     pos = estado.posicoes["CNPJ-HGLG11"]
     assert pos.quantidade == 100
     assert pos.custo_medio == D("100.00")  # inalterado
@@ -144,7 +144,7 @@ def test_day_trade_parcial_o_excedente_vira_swing():
         op(date(2025, 1, 10), "HGLG11", "C", 100, "100.00"),
         op(date(2025, 1, 10), "HGLG11", "V", 60, "105.00"),
     ]
-    apuracoes, estado = apurar(ops)
+    apuracoes, estado, _ = apurar(ops)
     jan = apuracoes[0]
     assert jan.resultado_day == D("300.00")  # (105-100)*60
     assert estado.posicoes["CNPJ-HGLG11"].quantidade == 40
@@ -160,7 +160,7 @@ def test_irrf_swing_abate_do_ir_devido():
         op(date(2025, 1, 5), "HGLG11", "C", 100, "100.00"),
         op(date(2025, 1, 20), "HGLG11", "V", 100, "150.00", irrf="0.75"),  # 0,005% de 15000
     ]
-    apuracoes, _ = apurar(ops)
+    apuracoes, _, _ = apurar(ops)
     jan = apuracoes[0]
     assert jan.ir_swing == D("1000.00")     # 20% de 5000
     assert jan.irrf_swing == D("0.75")
@@ -178,7 +178,7 @@ def test_irrf_excedente_acumula_para_meses_seguintes():
         op(date(2025, 2, 5), "XPLG11", "C", 100, "100.00"),
         op(date(2025, 2, 20), "XPLG11", "V", 100, "150.00"),  # lucro 5000, prejuízo já compensa 2000
     ]
-    apuracoes, estado = apurar(ops)
+    apuracoes, estado, _ = apurar(ops)
     # Fev: base = 5000 - 2000 = 3000; IR = 600; IRRF disponível = 0.40 → ir_a_pagar = 599.60
     assert apuracoes[1].ir_a_pagar == D("599.60")
     assert estado.irrf_acumulado_swing == D("0.00")
@@ -194,7 +194,7 @@ def test_darf_abaixo_de_10_reais_acumula_para_o_mes_seguinte():
         op(date(2025, 1, 5), "HGLG11", "C", 10, "100.00"),
         op(date(2025, 1, 20), "HGLG11", "V", 10, "104.00"),  # lucro 40, IR 8
     ]
-    apuracoes, estado = apurar(ops)
+    apuracoes, estado, _ = apurar(ops)
     assert apuracoes[0].ir_swing == D("8.00")
     assert apuracoes[0].ir_a_pagar == D("0.00")  # abaixo de R$10
     assert estado.darf_acumulado == D("8.00")
@@ -209,7 +209,7 @@ def test_darf_acumulado_some_quando_atinge_o_minimo():
         op(date(2025, 2, 5), "XPLG11", "C", 10, "100.00"),
         op(date(2025, 2, 20), "XPLG11", "V", 10, "104.00"),
     ]
-    apuracoes, estado = apurar(ops)
+    apuracoes, estado, _ = apurar(ops)
     assert apuracoes[1].ir_a_pagar == D("16.00")
     assert estado.darf_acumulado == D("0.00")
 
@@ -223,7 +223,7 @@ def test_darf_gerado_com_codigo_e_vencimento_corretos():
         op(date(2025, 1, 5), "HGLG11", "C", 100, "100.00"),
         op(date(2025, 1, 20), "HGLG11", "V", 100, "150.00"),
     ]
-    apuracoes, _ = apurar(ops)
+    apuracoes, _, _ = apurar(ops)
     darf = gerar_darf(apuracoes[0])
     assert darf is not None
     assert darf.codigo_receita == "6015"
@@ -238,7 +238,7 @@ def test_darf_de_dezembro_vence_em_janeiro():
         op(date(2025, 11, 5), "HGLG11", "C", 100, "100.00"),
         op(date(2025, 12, 20), "HGLG11", "V", 100, "150.00"),
     ]
-    apuracoes, _ = apurar(ops)
+    apuracoes, _, _ = apurar(ops)
     darf = gerar_darf(apuracoes[-1])
     assert darf is not None
     # Último dia útil de janeiro/2026 = 30/01 (sexta) — 31 é sábado
@@ -248,6 +248,31 @@ def test_darf_de_dezembro_vence_em_janeiro():
 # ──────────────────────────────────────────────────────────────────────────
 # 8. Estado inicial (posição custodiada antes de começar a usar a app)
 # ──────────────────────────────────────────────────────────────────────────
+
+def test_modo_tolerante_pula_vendas_sem_posicao():
+    """Permite lançar vendas antes das compras correspondentes — venda fica pendente."""
+    ops = [
+        # Venda sem compra anterior
+        op(date(2025, 3, 10), "HGLG11", "V", 100, "150.00"),
+        # Outra operação completa em paralelo
+        op(date(2025, 1, 5), "XPLG11", "C", 50, "100.00"),
+        op(date(2025, 2, 10), "XPLG11", "V", 50, "120.00"),
+    ]
+    apuracoes, estado, pendentes = apurar(ops, modo_tolerante=True)
+    # XPLG11 apurou normal em fevereiro (lucro 1000)
+    fev = next(a for a in apuracoes if (a.ano, a.mes) == (2025, 2))
+    assert fev.resultado_swing == D("1000.00")
+    # HGLG11 ficou pendente
+    assert len(pendentes) == 1
+    assert pendentes[0].ticker == "HGLG11"
+
+
+def test_modo_estrito_continua_levantando_erro_em_venda_orfa():
+    """Sem modo tolerante, venda sem posição quebra (proteção contra dados inconsistentes)."""
+    ops = [op(date(2025, 3, 10), "HGLG11", "V", 100, "150.00")]
+    with pytest.raises(ValueError, match="sem posição suficiente"):
+        apurar(ops)
+
 
 def test_estado_inicial_permite_continuar_de_uma_posicao_antiga():
     from core.models import Posicao
@@ -259,7 +284,7 @@ def test_estado_inicial_permite_continuar_de_uma_posicao_antiga():
         prejuizo_acumulado_swing=D("500.00"),
     )
     ops = [op(date(2025, 6, 10), "HGLG11", "V", 100, "120.00")]
-    apuracoes, estado_final = apurar(ops, estado_inicial=estado)
+    apuracoes, estado_final, _ = apurar(ops, estado_inicial=estado)
     # custo médio era 100; vende a 120 → lucro 2000; compensa 500 de prejuízo → base 1500
     assert apuracoes[0].resultado_swing == D("2000.00")
     assert apuracoes[0].prejuizo_swing_compensado == D("500.00")

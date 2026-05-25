@@ -181,6 +181,8 @@ def _apurar_mes(
     ano: int,
     mes: int,
     operacoes_do_mes: list[Operacao],
+    avisos: list[Operacao] | None = None,
+    modo_tolerante: bool = False,
 ) -> ApuracaoMensal:
     apuracao = ApuracaoMensal(ano=ano, mes=mes)
 
@@ -203,7 +205,13 @@ def _apurar_mes(
             if op.tipo == TipoOperacao.COMPRA:
                 _processar_compra(estado, op)
             else:
-                resultado = _processar_venda(estado, op)
+                try:
+                    resultado = _processar_venda(estado, op)
+                except ValueError:
+                    if modo_tolerante and avisos is not None:
+                        avisos.append(op)
+                        continue
+                    raise
                 apuracao.vendas.append(resultado)
                 apuracao.resultado_swing += resultado.resultado
                 apuracao.irrf_swing += op.irrf
@@ -262,20 +270,27 @@ def _apurar_mes(
 def apurar(
     operacoes: list[Operacao],
     estado_inicial: EstadoFiscal | None = None,
-) -> tuple[list[ApuracaoMensal], EstadoFiscal]:
+    modo_tolerante: bool = False,
+) -> tuple[list[ApuracaoMensal], EstadoFiscal, list[Operacao]]:
     """
-    Apura todas as operações cronologicamente, retornando uma apuração por mês
-    em que houve movimento e o estado final (posições + prejuízos + acumulados).
+    Apura todas as operações cronologicamente, retornando uma apuração por mês,
+    o estado final, e a lista de vendas pendentes (sem posição correspondente).
 
-    O `estado_inicial` permite continuar a apuração a partir de uma posição
-    pré-existente (custódia antiga, prejuízos declarados em anos anteriores).
+    Com `modo_tolerante=False` (default), uma venda sem posição levanta ValueError.
+    Com `modo_tolerante=True`, a venda é pulada e devolvida na lista de pendentes,
+    permitindo que o usuário lance as compras correspondentes depois sem perder
+    o trabalho já feito.
     """
     estado = estado_inicial or EstadoFiscal()
     ops_classificadas = classificar_operacoes(operacoes)
     ops_classificadas.sort(key=lambda o: o.data)
 
     apuracoes: list[ApuracaoMensal] = []
+    pendentes: list[Operacao] = []
     chave_mes = lambda o: (o.data.year, o.data.month)
     for (ano, mes), grupo in groupby(ops_classificadas, key=chave_mes):
-        apuracoes.append(_apurar_mes(estado, ano, mes, list(grupo)))
-    return apuracoes, estado
+        apuracoes.append(_apurar_mes(
+            estado, ano, mes, list(grupo),
+            avisos=pendentes, modo_tolerante=modo_tolerante,
+        ))
+    return apuracoes, estado, pendentes

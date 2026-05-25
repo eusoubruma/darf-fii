@@ -151,22 +151,34 @@ def pagina_apuracao() -> None:
         st.info("Sem operações para apurar.")
         return
 
-    try:
-        apuracoes, estado_final = apurar(
-            st.session_state.operacoes,
-            estado_inicial=_copiar_estado(st.session_state.estado_inicial),
+    apuracoes, estado_final, pendentes = apurar(
+        st.session_state.operacoes,
+        estado_inicial=_copiar_estado(st.session_state.estado_inicial),
+        modo_tolerante=True,
+    )
+
+    if pendentes:
+        st.warning(
+            f"⚠️ **{len(pendentes)} venda(s) pendente(s)** — sem posição correspondente "
+            "para calcular o lucro/prejuízo. A apuração abaixo ignora essas operações até "
+            "você cadastrar as compras originais (na aba **Estado inicial** ou importando "
+            "um extrato com período maior)."
         )
-    except ValueError as exc:
-        st.error(
-            f"**Não foi possível apurar:** {exc}\n\n"
-            "Isso acontece quando o motor encontra uma **venda sem posição correspondente** — "
-            "geralmente porque as compras originais são anteriores ao período importado.\n\n"
-            "**Como resolver:**\n"
-            "1. Vá na aba **Estado inicial** e cadastre a posição que você tinha antes "
-            "(quantidade + custo médio na época da compra original); ou\n"
-            "2. Importe um extrato XLSX de um período maior, que inclua as compras originais."
+        df_pend = pd.DataFrame([{
+            "Data": o.data.strftime("%d/%m/%Y"),
+            "Ticker": o.ticker,
+            "Qtd": o.quantidade,
+            "Preço": float(o.preco_unitario),
+            "Valor": float(o.valor_liquido),
+        } for o in pendentes])
+        st.dataframe(
+            df_pend, hide_index=True, use_container_width=True,
+            column_config={
+                "Preço": st.column_config.NumberColumn(format="R$ %.2f"),
+                "Valor": st.column_config.NumberColumn(format="R$ %.2f"),
+            },
         )
-        return
+        st.divider()
 
     linhas = []
     for a in apuracoes:
@@ -227,9 +239,10 @@ def pagina_apuracao() -> None:
 
 def pagina_posicao() -> None:
     st.subheader("Posição atual em custódia")
-    _, estado_final = apurar(
+    _, estado_final, _ = apurar(
         st.session_state.operacoes,
         estado_inicial=_copiar_estado(st.session_state.estado_inicial),
+        modo_tolerante=True,
     )
     pos_ativas = [p for p in estado_final.posicoes.values() if p.quantidade > 0]
     if not pos_ativas:
